@@ -26,8 +26,11 @@ export async function POST(req: NextRequest) {
 
     // Determine voice based on character
     const voice = CHARACTER_VOICES[character] || 'jam';
+    
+    // Ensure speed is within valid range (0.5 - 2.0)
+    const validSpeed = Math.max(0.5, Math.min(2.0, speed || 0.9));
 
-    console.log(`🔊 TTS API: Generating speech for ${character} (${voice}): "${truncatedText.slice(0, 50)}..."`);
+    console.log(`🔊 TTS API: Generating speech for ${character} (${voice}) at speed ${validSpeed}: "${truncatedText.slice(0, 50)}..."`);
 
     // Dynamic import for z-ai-web-dev-sdk
     const ZAI = (await import('z-ai-web-dev-sdk')).default;
@@ -37,7 +40,7 @@ export async function POST(req: NextRequest) {
     const response = await zai.audio.tts.create({
       input: truncatedText,
       voice: voice,
-      speed: speed,
+      speed: validSpeed,
       response_format: 'mp3',
       stream: false,
     });

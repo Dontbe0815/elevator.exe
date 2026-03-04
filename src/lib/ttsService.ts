@@ -17,6 +17,8 @@ class TTSService {
   private isEnabled: boolean = true;
   private volume: number = 0.8;
   private initialized: boolean = false;
+  private consecutiveErrors: number = 0;
+  private readonly MAX_ERRORS = 3;
 
   constructor() {
     // Audio will be created on first use
@@ -28,15 +30,31 @@ class TTSService {
   private initAudio() {
     if (this.initialized) return;
     
-    this.audio = new Audio();
-    this.audio.onended = () => this.playNext();
-    this.audio.onerror = (e) => {
-      console.error('TTS audio error:', e);
-      this.isPlaying = false;
-      this.playNext();
-    };
-    this.initialized = true;
-    console.log('🔊 TTS Service initialized');
+    try {
+      this.audio = new Audio();
+      this.audio.onended = () => {
+        console.log('🔊 TTS: Audio playback ended');
+        this.isPlaying = false;
+        this.playNext();
+      };
+      this.audio.onerror = (e) => {
+        console.error('TTS audio error:', e);
+        this.isPlaying = false;
+        this.consecutiveErrors++;
+        if (this.consecutiveErrors >= this.MAX_ERRORS) {
+          console.warn('🔊 TTS: Too many errors, disabling TTS');
+          this.isEnabled = false;
+        }
+        this.playNext();
+      };
+      this.audio.oncanplaythrough = () => {
+        console.log('🔊 TTS: Audio can play through');
+      };
+      this.initialized = true;
+      console.log('🔊 TTS Service initialized');
+    } catch (e) {
+      console.error('Failed to initialize TTS audio:', e);
+    }
   }
 
   // Generate cache key
@@ -73,6 +91,9 @@ class TTSService {
       console.log('🔊 TTS disabled or no text');
       return Promise.resolve();
     }
+    
+    // Reset error count on successful call
+    this.consecutiveErrors = 0;
 
     // Clean text for TTS (remove stage directions)
     const cleanText = this.cleanTextForTTS(text);
@@ -122,6 +143,13 @@ class TTSService {
       if (!this.audio) {
         this.initAudio();
       }
+      
+      if (!this.audio) {
+        console.error('TTS: Audio element not available');
+        item.resolve();
+        this.playNext();
+        return;
+      }
 
       // Check cache first
       const cacheKey = this.getCacheKey(item.text, item.character);
@@ -130,37 +158,48 @@ class TTSService {
       if (!audioUrl) {
         console.log(`🔊 TTS: Fetching from API for ${item.character}...`);
         
-        // Fetch from API
-        const response = await fetch('/api/tts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            text: item.text,
-            character: item.character,
-            speed: 0.9
-          })
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          console.error('TTS API failed:', response.status, errorData);
-          throw new Error(`TTS API failed: ${response.status}`);
-        }
-
-        // Create blob URL
-        const blob = await response.blob();
-        audioUrl = URL.createObjectURL(blob);
+        // Fetch from API with timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
         
-        // Cache the URL (limit cache size)
-        if (this.cache.size > 50) {
-          const firstKey = this.cache.keys().next().value;
-          if (firstKey) {
-            URL.revokeObjectURL(this.cache.get(firstKey)!);
-            this.cache.delete(firstKey);
+        try {
+          const response = await fetch('/api/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              text: item.text,
+              character: item.character,
+              speed: 0.9
+            }),
+            signal: controller.signal
+          });
+          
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            console.error('TTS API failed:', response.status, errorData);
+            throw new Error(`TTS API failed: ${response.status}`);
           }
+
+          // Create blob URL
+          const blob = await response.blob();
+          audioUrl = URL.createObjectURL(blob);
+          
+          // Cache the URL (limit cache size)
+          if (this.cache.size > 50) {
+            const firstKey = this.cache.keys().next().value;
+            if (firstKey) {
+              URL.revokeObjectURL(this.cache.get(firstKey)!);
+              this.cache.delete(firstKey);
+            }
+          }
+          this.cache.set(cacheKey, audioUrl);
+          console.log(`🔊 TTS: Cached audio for ${item.character} (${blob.size} bytes)`);
+        } catch (fetchError) {
+          clearTimeout(timeoutId);
+          throw fetchError;
         }
-        this.cache.set(cacheKey, audioUrl);
-        console.log(`🔊 TTS: Cached audio for ${item.character}`);
       } else {
         console.log(`🔊 TTS: Using cached audio for ${item.character}`);
       }
@@ -169,8 +208,34 @@ class TTSService {
       if (this.audio && this.isEnabled) {
         this.audio.src = audioUrl;
         this.audio.volume = this.volume;
+        
+        // Wait for audio to be ready
+        await new Promise<void>((resolve, reject) => {
+          if (!this.audio) {
+            reject(new Error('Audio element lost'));
+            return;
+          }
+          
+          const onCanPlay = () => {
+            this.audio?.removeEventListener('canplaythrough', onCanPlay);
+            this.audio?.removeEventListener('error', onError);
+            resolve();
+          };
+          
+          const onError = (e: Event) => {
+            this.audio?.removeEventListener('canplaythrough', onCanPlay);
+            this.audio?.removeEventListener('error', onError);
+            reject(new Error('Audio load error'));
+          };
+          
+          this.audio.addEventListener('canplaythrough', onCanPlay);
+          this.audio.addEventListener('error', onError);
+          this.audio.load();
+        });
+        
         await this.audio.play();
         console.log(`🔊 TTS: Playing audio for ${item.character}`);
+        this.consecutiveErrors = 0; // Reset error count on success
       } else {
         // TTS was disabled while fetching
         item.resolve();
@@ -178,6 +243,11 @@ class TTSService {
       }
     } catch (error) {
       console.error('TTS playback error:', error);
+      this.consecutiveErrors++;
+      if (this.consecutiveErrors >= this.MAX_ERRORS) {
+        console.warn('🔊 TTS: Too many consecutive errors, disabling TTS');
+        this.isEnabled = false;
+      }
       item.resolve();
       this.playNext();
     }

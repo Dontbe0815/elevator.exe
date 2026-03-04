@@ -18,11 +18,16 @@ export function GameScreen() {
 
   // Start ingame music once when game screen loads
   useEffect(() => {
-    if (!hasStartedIngameMusic.current && state.game_started) {
-      audioManager.stopMusic(); // Stop menu music
-      audioManager.startIngameMusic(); // Start ingame music
-      hasStartedIngameMusic.current = true;
-    }
+    const startIngameAudio = async () => {
+      if (!hasStartedIngameMusic.current && state.game_started) {
+        console.log('🔊 Starting ingame music...');
+        audioManager.stopMusic(); // Stop menu music
+        await audioManager.resume();
+        await audioManager.startIngameMusic();
+        hasStartedIngameMusic.current = true;
+      }
+    };
+    startIngameAudio();
   }, [state.game_started]);
 
   // Handle floor changes

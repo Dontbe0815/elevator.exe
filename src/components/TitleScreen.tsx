@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useGame } from '@/lib/gameStore';
 import { audioManager } from '@/lib/audioManager';
 
@@ -11,7 +11,7 @@ export function TitleScreen() {
   const [volume, setVolume] = useState(50);
   const [showSettings, setShowSettings] = useState(false);
   const [audioReady, setAudioReady] = useState(false);
-  const hasStartedAudio = useRef(false);
+  const [audioStarted, setAudioStarted] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setShowContent(true), 500);
@@ -51,13 +51,16 @@ export function TitleScreen() {
 
   // Start music on any click (browser policy)
   const startMusic = async () => {
-    if (hasStartedAudio.current) return;
+    if (audioStarted) return;
     
     try {
-      hasStartedAudio.current = true;
+      setAudioStarted(true);
+      console.log('🔊 User clicked - starting audio...');
       await audioManager.resume();
-      audioManager.startMenuMusic();
       audioManager.setVolume(volume / 100);
+      // Small delay to ensure audio context is ready
+      await new Promise(resolve => setTimeout(resolve, 100));
+      await audioManager.startMenuMusic();
       console.log('🔊 Music started from user interaction');
     } catch (e) {
       console.error('Failed to start music:', e);
@@ -263,8 +266,8 @@ export function TitleScreen() {
         </button>
 
         {/* Hint text */}
-        <div className="mt-8 text-gray-600 text-xs font-mono animate-pulse">
-          🔊 Click anywhere to enable audio
+        <div className="mt-8 text-gray-500 text-xs font-mono">
+          {audioStarted ? '🔊 Audio enabled' : '🔊 Click anywhere to enable audio'}
         </div>
       </div>
 

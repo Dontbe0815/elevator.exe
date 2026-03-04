@@ -11,6 +11,7 @@ class AudioManager {
   private musicElements: Map<string, HTMLAudioElement> = new Map();
   private isInitialized = false;
   private currentTrack: string | null = null;
+  private userHasInteracted = false;
 
   async initialize() {
     if (this.isInitialized) return;
@@ -35,6 +36,9 @@ class AudioManager {
       
       this.isInitialized = true;
       console.log('🔊 Audio system initialized with MP3 music support');
+      
+      // Log AudioContext state
+      console.log('🔊 AudioContext state:', this.audioContext.state);
     } catch (e) {
       console.error('Failed to initialize audio:', e);
     }
@@ -66,17 +70,39 @@ class AudioManager {
 
     // Play new track
     audio.currentTime = 0;
-    if (fadeIn) {
-      audio.volume = 0;
-      audio.play().catch(e => console.log('Audio autoplay blocked:', e));
-      this.fadeMusicIn(audio, 0.5, 2000);
-    } else {
-      audio.volume = 0.5;
-      audio.play().catch(e => console.log('Audio autoplay blocked:', e));
-    }
     
-    this.currentTrack = trackId;
-    console.log(`🎵 Playing: ${trackId}`);
+    const playAttempt = async () => {
+      try {
+        if (fadeIn) {
+          audio.volume = 0;
+          await audio.play();
+          this.fadeMusicIn(audio, 0.5, 2000);
+          console.log(`🎵 Playing: ${trackId} (faded in)`);
+        } else {
+          audio.volume = 0.5;
+          await audio.play();
+          console.log(`🎵 Playing: ${trackId}`);
+        }
+        this.currentTrack = trackId;
+      } catch (e) {
+        console.warn('Audio play blocked, will retry on next interaction:', e);
+        // Store the track to play after interaction
+        this.pendingTrack = trackId;
+      }
+    };
+    
+    playAttempt();
+  }
+  
+  private pendingTrack: string | null = null;
+  
+  // Play pending track after user interaction
+  playPendingTrack() {
+    if (this.pendingTrack) {
+      const track = this.pendingTrack;
+      this.pendingTrack = null;
+      this.playMusic(track);
+    }
   }
 
   // Fade in music
@@ -119,12 +145,24 @@ class AudioManager {
   }
 
   // Start menu music
-  startMenuMusic() {
+  async startMenuMusic() {
+    console.log('🔊 startMenuMusic called, userHasInteracted:', this.userHasInteracted);
+    if (!this.userHasInteracted) {
+      console.log('🔊 Waiting for user interaction before playing music');
+      return;
+    }
+    await this.resume();
     this.playMusic('menu');
   }
 
   // Start ingame music
-  startIngameMusic() {
+  async startIngameMusic() {
+    console.log('🔊 startIngameMusic called, userHasInteracted:', this.userHasInteracted);
+    if (!this.userHasInteracted) {
+      console.log('🔊 Waiting for user interaction before playing music');
+      return;
+    }
+    await this.resume();
     this.playMusic('ingame');
   }
 
@@ -376,9 +414,12 @@ class AudioManager {
 
   // Resume audio context (needed for browsers that block autoplay)
   async resume() {
+    console.log('🔊 Resume called - AudioContext state:', this.audioContext?.state);
     if (this.audioContext && this.audioContext.state === 'suspended') {
       await this.audioContext.resume();
+      console.log('🔊 AudioContext resumed, new state:', this.audioContext.state);
     }
+    this.userHasInteracted = true;
   }
 
   // Change floor (keep music, just play transition sound)
