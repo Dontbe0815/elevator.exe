@@ -24,7 +24,7 @@ const SCENE_IMAGES: Record<string, { image: string; caption: string }> = {
 };
 
 export function DialoguePanel() {
-  const { currentNode, state, nextNode, makeChoice } = useGame();
+  const { currentNode, state, nextNode, makeChoice, showEnding } = useGame();
   const [displayedText, setDisplayedText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [showChoices, setShowChoices] = useState(false);
@@ -60,7 +60,7 @@ export function DialoguePanel() {
         clearInterval(interval);
         
         // Start TTS after typewriter effect completes
-        if (ttsEnabled && currentNode.speaker) {
+        if (ttsEnabled && currentNode.speaker && !currentNode.is_ending) {
           const speaker = currentNode.speaker as CharacterSpeaker;
           setIsSpeaking(true);
           ttsService.speak(text, speaker).then(() => {
@@ -91,6 +91,7 @@ export function DialoguePanel() {
 
   const isCharacter = currentNode.speaker !== 'SYSTEM' && currentNode.speaker !== 'PLAYER';
   const speakerInfo = isCharacter ? CHARACTERS[currentNode.speaker as CharacterId] : null;
+  const isEndingNode = currentNode.is_ending;
 
   const handleNext = () => {
     // Skip TTS if speaking
@@ -106,8 +107,8 @@ export function DialoguePanel() {
       setIsTyping(false);
       setShowChoices(true);
       
-      // Start TTS immediately after skip
-      if (ttsEnabled && currentNode.speaker) {
+      // Start TTS immediately after skip (but not for endings)
+      if (ttsEnabled && currentNode.speaker && !isEndingNode) {
         const speaker = currentNode.speaker as CharacterSpeaker;
         setIsSpeaking(true);
         ttsService.speak(currentNode.text, speaker).then(() => {
@@ -117,6 +118,7 @@ export function DialoguePanel() {
       return;
     }
     
+    // Navigate to next node if there is one
     if (currentNode.next_node_id && !currentNode.choices) {
       audioManager.playClick();
       ttsService.stop();
@@ -130,6 +132,21 @@ export function DialoguePanel() {
     ttsService.stop();
     setIsSpeaking(false);
     makeChoice(currentNode.id, choiceId);
+  };
+
+  // Handle reaching an ending - trigger the ending phase
+  const handleViewEnding = () => {
+    audioManager.playChoiceSelect();
+    ttsService.stop();
+    
+    // Play ending sound
+    if (currentNode.ending_type) {
+      audioManager.stopAll();
+      audioManager.playEnding(currentNode.ending_type);
+    }
+    
+    // Show the ending screen
+    showEnding();
   };
 
   // Check if current node has a scene image
@@ -225,7 +242,7 @@ export function DialoguePanel() {
         </div>
 
         {/* Continue Indicator */}
-        {!isTyping && currentNode.next_node_id && !currentNode.choices && (
+        {!isTyping && currentNode.next_node_id && !currentNode.choices && !isEndingNode && (
           <div className="absolute bottom-4 right-4 text-gray-400 text-sm animate-pulse">
             {isSpeaking ? 'Click to skip voice ▸' : 'Click to continue ▸'}
           </div>
@@ -244,6 +261,30 @@ export function DialoguePanel() {
               onSelect={() => handleChoice(choice.id)}
             />
           ))}
+        </div>
+      )}
+
+      {/* Ending Continue Button */}
+      {showChoices && isEndingNode && !isTyping && (
+        <div className="mt-6 animate-fadeIn">
+          <button
+            onClick={handleViewEnding}
+            className="
+              w-full py-4 px-8 rounded-lg
+              bg-gradient-to-r from-purple-900/50 to-cyan-900/50
+              border-2 border-cyan-500
+              text-cyan-400 font-mono text-lg tracking-wider
+              hover:from-purple-800/50 hover:to-cyan-800/50
+              hover:text-cyan-300 hover:scale-[1.02]
+              transition-all duration-300
+              animate-pulse
+            "
+          >
+            ✧ VIEW ENDING ✧
+          </button>
+          <div className="text-center text-gray-500 text-xs mt-2 font-mono">
+            The loop reaches its conclusion...
+          </div>
         </div>
       )}
     </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useGame } from '@/lib/gameStore';
 import { audioManager } from '@/lib/audioManager';
 
@@ -10,25 +10,26 @@ export function TitleScreen() {
   const [glitchText, setGlitchText] = useState('ELEVATOR.EXE');
   const [volume, setVolume] = useState(50);
   const [showSettings, setShowSettings] = useState(false);
+  const [audioReady, setAudioReady] = useState(false);
+  const hasStartedAudio = useRef(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setShowContent(true), 500);
     return () => clearTimeout(timer);
   }, []);
 
-  // Start menu music immediately on mount
+  // Initialize audio (but don't play yet - browser policy requires user interaction)
   useEffect(() => {
-    const startMusic = async () => {
+    const initAudio = async () => {
       try {
         await audioManager.initialize();
-        await audioManager.resume();
-        audioManager.startMenuMusic();
-        audioManager.setVolume(0.5);
+        setAudioReady(true);
+        console.log('🔊 Audio initialized, ready for user interaction');
       } catch (e) {
-        console.error('Audio failed to start:', e);
+        console.error('Audio initialization failed:', e);
       }
     };
-    startMusic();
+    initAudio();
   }, []);
 
   // Glitch effect for title
@@ -48,8 +49,34 @@ export function TitleScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleStart = () => {
+  // Start music on any click (browser policy)
+  const startMusic = async () => {
+    if (hasStartedAudio.current) return;
+    
+    try {
+      hasStartedAudio.current = true;
+      await audioManager.resume();
+      audioManager.startMenuMusic();
+      audioManager.setVolume(volume / 100);
+      console.log('🔊 Music started from user interaction');
+    } catch (e) {
+      console.error('Failed to start music:', e);
+    }
+  };
+
+  const handleStart = async () => {
+    // Start music if not already started
+    await startMusic();
+    
+    // Play click sound
     audioManager.playClick();
+    
+    // Transition to ingame music after a short delay
+    setTimeout(() => {
+      audioManager.stopMusic();
+      audioManager.startIngameMusic();
+    }, 500);
+    
     startGame();
   };
 
@@ -59,7 +86,10 @@ export function TitleScreen() {
   };
 
   return (
-    <div className="min-h-screen bg-black flex flex-col items-center justify-center relative overflow-hidden">
+    <div 
+      className="min-h-screen bg-black flex flex-col items-center justify-center relative overflow-hidden"
+      onClick={startMusic} // Start music on any click
+    >
       {/* Animated Background */}
       <div className="absolute inset-0">
         {/* Grid lines */}
@@ -104,7 +134,10 @@ export function TitleScreen() {
 
       {/* Settings Button - TOP RIGHT */}
       <button
-        onClick={() => setShowSettings(!showSettings)}
+        onClick={(e) => {
+          e.stopPropagation();
+          setShowSettings(!showSettings);
+        }}
         className="absolute top-4 right-4 z-20 p-3 rounded-lg bg-gray-900/80 border border-gray-700 hover:border-cyan-500 transition-colors"
         title="Settings"
       >
@@ -161,6 +194,12 @@ export function TitleScreen() {
               >
                 MAX
               </button>
+            </div>
+            
+            {/* Audio status */}
+            <div className="text-xs text-gray-500 mt-2 flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${audioReady ? 'bg-green-500' : 'bg-gray-500'}`} />
+              {audioReady ? 'Audio ready' : 'Initializing audio...'}
             </div>
           </div>
         </div>
@@ -225,7 +264,7 @@ export function TitleScreen() {
 
         {/* Hint text */}
         <div className="mt-8 text-gray-600 text-xs font-mono animate-pulse">
-          🔊 Music is playing • Adjust volume with ⚙️ settings
+          🔊 Click anywhere to enable audio
         </div>
       </div>
 

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Character to voice mapping
+// Character to voice mapping - using different voices for variety
 const CHARACTER_VOICES: Record<string, string> = {
-  viktor: 'jam',      // English gentleman - for the male worker
-  livia: 'tongtong',  // Warm and kind - for the female witness  
-  kairen: 'xiaochen', // Calm professional - for the paradox
-  SYSTEM: 'kazi',     // Clear standard - for system messages
+  viktor: 'jam',      // English gentleman voice - for the male worker
+  livia: 'tongtong',  // Warm and kind voice - for the female witness  
+  kairen: 'xiaochen', // Calm professional voice - for the paradox
+  SYSTEM: 'kazi',     // Clear standard voice - for system messages
   PLAYER: 'jam'       // Default to jam for player
 };
 
@@ -22,10 +22,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Truncate text if too long (API limit is 1024 chars)
-    const truncatedText = text.slice(0, 1000);
+    const truncatedText = text.slice(0, 900);
 
     // Determine voice based on character
     const voice = CHARACTER_VOICES[character] || 'jam';
+
+    console.log(`🔊 TTS API: Generating speech for ${character} (${voice}): "${truncatedText.slice(0, 50)}..."`);
 
     // Dynamic import for z-ai-web-dev-sdk
     const ZAI = (await import('z-ai-web-dev-sdk')).default;
@@ -43,6 +45,8 @@ export async function POST(req: NextRequest) {
     // Get array buffer from Response object
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(new Uint8Array(arrayBuffer));
+
+    console.log(`🔊 TTS API: Generated ${buffer.length} bytes of audio`);
 
     // Return audio as response
     return new NextResponse(buffer, {

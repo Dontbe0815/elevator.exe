@@ -22,6 +22,7 @@ type GameAction =
   | { type: 'UPDATE_ATTRIBUTES'; character: CharacterId; delta: Record<string, number> }
   | { type: 'VISIT_FLOOR'; floor: FloorId }
   | { type: 'SET_PHASE'; phase: GameState['game_phase'] }
+  | { type: 'SHOW_ENDING' }
   | { type: 'RESTART' };
 
 // ==================== REDUCER ====================
@@ -62,6 +63,19 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       
       if (!choice) return state;
 
+      // Find the next node to check if it's an ending
+      const nextNode = DIALOGUE_NODES.find(n => n.id === choice.next_node_id);
+      
+      // Determine new phase
+      let newPhaseFromChoice = state.game_phase;
+      if (nextNode?.is_ending) {
+        newPhaseFromChoice = 'ENDING';
+      } else if (nextNode?.current_floor === 'F13') {
+        newPhaseFromChoice = 'CORE';
+      } else if (state.game_phase === 'INTRO') {
+        newPhaseFromChoice = 'EXPLORATION';
+      }
+
       // Apply emotional impacts
       let updatedCharacters = { ...state.characters };
       choice.emotional_impact.forEach(impact => {
@@ -86,11 +100,20 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         }
       });
 
+      // Update visited floors
+      const newFloor = nextNode?.current_floor;
+      const newVisitedFloors = newFloor && !state.visited_floors.includes(newFloor)
+        ? [...state.visited_floors, newFloor]
+        : state.visited_floors;
+
       return {
         ...state,
         current_node_id: choice.next_node_id,
+        current_floor: nextNode?.current_floor || state.current_floor,
+        game_phase: newPhaseFromChoice,
         choices_made: [...state.choices_made, { node_id: action.nodeId, choice_id: action.choiceId }],
-        characters: updatedCharacters
+        characters: updatedCharacters,
+        visited_floors: newVisitedFloors
       };
 
     case 'UPDATE_EMOTIONAL_STATE':
@@ -139,6 +162,12 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         game_phase: action.phase
       };
 
+    case 'SHOW_ENDING':
+      return {
+        ...state,
+        game_phase: 'ENDING'
+      };
+
     case 'RESTART':
       return createInitialState();
 
@@ -156,6 +185,7 @@ interface GameContextType {
   startGame: () => void;
   nextNode: (nodeId: string) => void;
   makeChoice: (nodeId: string, choiceId: string) => void;
+  showEnding: () => void;
   restart: () => void;
   getPortraitPath: (character: CharacterId) => string;
   getStateColor: (state: EmotionalState) => string;
@@ -182,6 +212,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'MAKE_CHOICE', nodeId, choiceId });
   }, []);
 
+  const showEnding = useCallback(() => {
+    dispatch({ type: 'SHOW_ENDING' });
+  }, []);
+
   const restart = useCallback(() => {
     dispatch({ type: 'RESTART' });
   }, []);
@@ -204,6 +238,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       startGame,
       nextNode,
       makeChoice,
+      showEnding,
       restart,
       getPortraitPath,
       getStateColor
