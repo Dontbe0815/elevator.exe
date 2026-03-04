@@ -8,38 +8,54 @@ export function TitleScreen() {
   const { startGame } = useGame();
   const [showContent, setShowContent] = useState(false);
   const [glitchText, setGlitchText] = useState('ELEVATOR.EXE');
+  const [volume, setVolume] = useState(50);
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setShowContent(true), 500);
     return () => clearTimeout(timer);
   }, []);
 
+  // Start menu music immediately on mount
+  useEffect(() => {
+    const startMusic = async () => {
+      try {
+        await audioManager.initialize();
+        await audioManager.resume();
+        audioManager.startMenuMusic();
+        audioManager.setVolume(0.5);
+      } catch (e) {
+        console.error('Audio failed to start:', e);
+      }
+    };
+    startMusic();
+  }, []);
+
   // Glitch effect for title
   useEffect(() => {
-    const glitchChars = '!@#$%^&*()_+-=[]{}|;:,.<>?';
+    const glitchChars = '!@#$%^&*()_+-=[]{}|;:,.<>?░▒▓';
     const originalText = 'ELEVATOR.EXE';
     
     const interval = setInterval(() => {
-      if (Math.random() > 0.95) {
+      if (Math.random() > 0.92) {
         const pos = Math.floor(Math.random() * originalText.length);
         const char = glitchChars[Math.floor(Math.random() * glitchChars.length)];
         setGlitchText(originalText.slice(0, pos) + char + originalText.slice(pos + 1));
-        setTimeout(() => setGlitchText(originalText), 100);
+        setTimeout(() => setGlitchText(originalText), 80 + Math.random() * 120);
       }
-    }, 100);
+    }, 80);
 
     return () => clearInterval(interval);
   }, []);
 
-  const handleStart = async () => {
-    try {
-      await audioManager.initialize();
-      await audioManager.resume();
-      audioManager.startMenuMusic(); // Start menu MP3 music
-    } catch (e) {
-      console.error('Audio failed to start:', e);
-    }
+  const handleStart = () => {
+    audioManager.playClick();
     startGame();
+  };
+
+  const handleVolumeChange = (newVolume: number) => {
+    setVolume(newVolume);
+    audioManager.setVolume(newVolume / 100);
   };
 
   return (
@@ -65,9 +81,17 @@ export function TitleScreen() {
             background: 'radial-gradient(ellipse at center, rgba(6, 182, 212, 0.15) 0%, transparent 70%)'
           }}
         />
+
+        {/* Animated scan line */}
+        <div 
+          className="absolute left-0 right-0 h-1 bg-gradient-to-r from-transparent via-cyan-400/30 to-transparent"
+          style={{
+            animation: 'scanMove 8s linear infinite'
+          }}
+        />
       </div>
 
-      {/* Floating elevator buttons */}
+      {/* Floating elevator buttons background */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-5 pointer-events-none">
         <div className="grid grid-cols-2 gap-2">
           {[1, 3, 5, 7, 9, 11, 13].map(floor => (
@@ -81,6 +105,70 @@ export function TitleScreen() {
         </div>
       </div>
 
+      {/* Settings Button - TOP RIGHT */}
+      <button
+        onClick={() => setShowSettings(!showSettings)}
+        className="absolute top-4 right-4 z-20 p-3 rounded-lg bg-gray-900/80 border border-gray-700 hover:border-cyan-500 transition-colors"
+        title="Settings"
+      >
+        <svg className="w-6 h-6 text-gray-400 hover:text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      </button>
+
+      {/* Settings Panel */}
+      {showSettings && (
+        <div className="absolute top-16 right-4 z-20 bg-gray-900/95 border border-gray-700 rounded-lg p-4 w-64 backdrop-blur-sm">
+          <h3 className="text-white font-mono text-sm mb-4 flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15.536a5 5 0 001.414 1.414m2.828-9.9a9 9 0 012.728-2.728" />
+            </svg>
+            AUDIO SETTINGS
+          </h3>
+          
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-400 text-sm">Master Volume</span>
+              <span className="text-cyan-400 font-mono text-sm">{volume}%</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={volume}
+              onChange={(e) => handleVolumeChange(Number(e.target.value))}
+              className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+              style={{
+                background: `linear-gradient(to right, #06B6D4 ${volume}%, #374151 ${volume}%)`
+              }}
+            />
+            
+            {/* Quick volume buttons */}
+            <div className="flex gap-2 mt-3">
+              <button 
+                onClick={() => handleVolumeChange(0)}
+                className="flex-1 py-1 text-xs font-mono bg-gray-800 hover:bg-gray-700 rounded border border-gray-700 text-gray-400"
+              >
+                MUTE
+              </button>
+              <button 
+                onClick={() => handleVolumeChange(50)}
+                className="flex-1 py-1 text-xs font-mono bg-gray-800 hover:bg-gray-700 rounded border border-gray-700 text-gray-400"
+              >
+                50%
+              </button>
+              <button 
+                onClick={() => handleVolumeChange(100)}
+                className="flex-1 py-1 text-xs font-mono bg-gray-800 hover:bg-gray-700 rounded border border-gray-700 text-gray-400"
+              >
+                MAX
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
       <div className={`relative z-10 text-center transition-all duration-1000 ${showContent ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
         {/* Title */}
@@ -89,7 +177,8 @@ export function TitleScreen() {
             className="text-6xl md:text-8xl font-mono font-bold tracking-wider"
             style={{
               color: '#06B6D4',
-              textShadow: '0 0 30px rgba(6, 182, 212, 0.5), 0 0 60px rgba(6, 182, 212, 0.3)'
+              textShadow: '0 0 30px rgba(6, 182, 212, 0.5), 0 0 60px rgba(6, 182, 212, 0.3)',
+              animation: 'textGlow 2s ease-in-out infinite alternate'
             }}
           >
             {glitchText}
@@ -138,17 +227,35 @@ export function TitleScreen() {
           />
         </button>
 
-        {/* Credits */}
-        <div className="absolute bottom-8 left-0 right-0 text-center">
-          <div className="text-gray-600 text-xs font-mono">
-            v1.0 | Memory Compression System Active
-          </div>
+        {/* Hint text */}
+        <div className="mt-8 text-gray-600 text-xs font-mono animate-pulse">
+          🔊 Music is playing • Adjust volume with ⚙️ settings
+        </div>
+      </div>
+
+      {/* Credits */}
+      <div className="absolute bottom-8 left-0 right-0 text-center z-10">
+        <div className="text-gray-600 text-xs font-mono">
+          v1.0 | Memory Compression System Active
         </div>
       </div>
 
       {/* Decorative Elements */}
       <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-purple-500/50 to-transparent" />
+
+      <style jsx>{`
+        @keyframes scanMove {
+          0% { top: -10px; opacity: 0; }
+          10% { opacity: 1; }
+          90% { opacity: 1; }
+          100% { top: 100vh; opacity: 0; }
+        }
+        @keyframes textGlow {
+          0% { text-shadow: 0 0 30px rgba(6, 182, 212, 0.5), 0 0 60px rgba(6, 182, 212, 0.3); }
+          100% { text-shadow: 0 0 40px rgba(6, 182, 212, 0.7), 0 0 80px rgba(6, 182, 212, 0.5), 0 0 120px rgba(6, 182, 212, 0.3); }
+        }
+      `}</style>
     </div>
   );
 }
