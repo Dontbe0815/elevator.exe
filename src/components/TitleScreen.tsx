@@ -84,10 +84,7 @@ export function TitleScreen() {
 
         {/* Animated scan line */}
         <div 
-          className="absolute left-0 right-0 h-1 bg-gradient-to-r from-transparent via-cyan-400/30 to-transparent"
-          style={{
-            animation: 'scanMove 8s linear infinite'
-          }}
+          className="absolute left-0 right-0 h-1 bg-gradient-to-r from-transparent via-cyan-400/30 to-transparent animate-scanMove"
         />
       </div>
 
@@ -174,11 +171,10 @@ export function TitleScreen() {
         {/* Title */}
         <div className="mb-4">
           <h1 
-            className="text-6xl md:text-8xl font-mono font-bold tracking-wider"
+            className="text-6xl md:text-8xl font-mono font-bold tracking-wider animate-textGlow"
             style={{
               color: '#06B6D4',
-              textShadow: '0 0 30px rgba(6, 182, 212, 0.5), 0 0 60px rgba(6, 182, 212, 0.3)',
-              animation: 'textGlow 2s ease-in-out infinite alternate'
+              textShadow: '0 0 30px rgba(6, 182, 212, 0.5), 0 0 60px rgba(6, 182, 212, 0.3)'
             }}
           >
             {glitchText}
@@ -243,19 +239,6 @@ export function TitleScreen() {
       {/* Decorative Elements */}
       <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-purple-500/50 to-transparent" />
-
-      <style jsx>{`
-        @keyframes scanMove {
-          0% { top: -10px; opacity: 0; }
-          10% { opacity: 1; }
-          90% { opacity: 1; }
-          100% { top: 100vh; opacity: 0; }
-        }
-        @keyframes textGlow {
-          0% { text-shadow: 0 0 30px rgba(6, 182, 212, 0.5), 0 0 60px rgba(6, 182, 212, 0.3); }
-          100% { text-shadow: 0 0 40px rgba(6, 182, 212, 0.7), 0 0 80px rgba(6, 182, 212, 0.5), 0 0 120px rgba(6, 182, 212, 0.3); }
-        }
-      `}</style>
     </div>
   );
 }

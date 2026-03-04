@@ -285,13 +285,6 @@ export function GameScreen() {
           </div>
         </div>
       </div>
-
-      <style jsx>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 0.3; }
-          50% { opacity: 0.5; }
-        }
-      `}</style>
     </div>
   );
 }
