@@ -74,12 +74,7 @@ export function TitleScreen() {
     // Play click sound
     audioManager.playClick();
     
-    // Transition to ingame music after a short delay
-    setTimeout(() => {
-      audioManager.stopMusic();
-      audioManager.startIngameMusic();
-    }, 500);
-    
+    // Start the game - GameScreen will handle ingame music
     startGame();
   };
 

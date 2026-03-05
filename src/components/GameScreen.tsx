@@ -20,11 +20,13 @@ export function GameScreen() {
   useEffect(() => {
     const startIngameAudio = async () => {
       if (!hasStartedIngameMusic.current && state.game_started) {
-        console.log('🔊 Starting ingame music...');
-        audioManager.stopMusic(); // Stop menu music
-        await audioManager.resume();
-        await audioManager.startIngameMusic();
+        console.log('🔊 GameScreen: Starting ingame music...');
         hasStartedIngameMusic.current = true;
+        
+        // Stop menu music and start ingame music
+        audioManager.stopMusic();
+        await audioManager.resume();
+        audioManager.playMusic('ingame');
       }
     };
     startIngameAudio();

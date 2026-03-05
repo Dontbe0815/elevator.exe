@@ -1,38 +1,16 @@
 // Pre-recorded dialogue audio service for ELEVATOR.EXE
-// Uses pre-generated WAV files instead of API calls
-
-export type CharacterSpeaker = 'viktor' | 'livia' | 'kairen' | 'SYSTEM' | 'PLAYER';
+// Uses pre-generated MP3 files - works everywhere without API calls
 
 class PreRecordedTTS {
   private audio: HTMLAudioElement | null = null;
-  private isPlaying: boolean = false;
   private isEnabled: boolean = true;
   private volume: number = 0.8;
-  private currentNodeId: string | null = null;
+  private consecutiveErrors: number = 0;
+  private readonly MAX_ERRORS = 5;
 
   constructor() {
     if (typeof window !== 'undefined') {
-      this.initAudio();
-    }
-  }
-
-  private initAudio() {
-    if (this.audio) return;
-    
-    try {
-      this.audio = new Audio();
-      this.audio.onended = () => {
-        this.isPlaying = false;
-        this.currentNodeId = null;
-      };
-      this.audio.onerror = () => {
-        console.warn('🔊 Pre-recorded audio error');
-        this.isPlaying = false;
-        this.currentNodeId = null;
-      };
-      console.log('🔊 Pre-recorded TTS Service initialized');
-    } catch (e) {
-      console.error('Failed to initialize pre-recorded audio:', e);
+      console.log('🔊 Pre-recorded TTS initialized');
     }
   }
 
@@ -63,14 +41,15 @@ class PreRecordedTTS {
       return Promise.resolve();
     }
 
-    if (!this.audio) {
-      this.initAudio();
-    }
-
-    // Stop any currently playing audio
+    // Stop any currently playing audio and clean up
     this.stop();
 
-    const audioPath = `/assets/audio/dialogue/${nodeId}.mp3`;
+    // Create fresh audio element each time
+    this.audio = new Audio();
+    
+    // Add cache-busting query parameter to avoid cached 404 responses
+    const timestamp = Date.now();
+    const audioPath = `/assets/audio/dialogue/${nodeId}.mp3?t=${timestamp}`;
     
     return new Promise((resolve) => {
       if (!this.audio) {
@@ -78,30 +57,37 @@ class PreRecordedTTS {
         return;
       }
 
-      this.audio.src = audioPath;
-      this.audio.volume = this.volume;
-      this.currentNodeId = nodeId;
-      
       this.audio.onended = () => {
-        this.isPlaying = false;
-        this.currentNodeId = null;
+        this.consecutiveErrors = 0; // Reset on success
         resolve();
       };
       
-      this.audio.onerror = () => {
-        console.warn(`🔊 Failed to play: ${audioPath}`);
-        this.isPlaying = false;
-        this.currentNodeId = null;
+      this.audio.onerror = (e) => {
+        this.consecutiveErrors++;
+        console.warn(`🔊 Audio error (${this.consecutiveErrors}): ${nodeId}`);
+        
+        // Disable after too many consecutive errors
+        if (this.consecutiveErrors >= this.MAX_ERRORS) {
+          console.warn('🔊 Too many audio errors, disabling voice');
+          this.isEnabled = false;
+        }
         resolve();
       };
 
-      this.audio.play().then(() => {
-        this.isPlaying = true;
-        console.log(`🔊 Playing: ${nodeId}`);
-      }).catch((e) => {
-        console.warn(`🔊 Play blocked: ${e.message}`);
-        resolve();
-      });
+      this.audio.oncanplaythrough = () => {
+        if (this.audio && this.isEnabled) {
+          this.audio.volume = this.volume;
+          this.audio.play().then(() => {
+            console.log(`🔊 Playing: ${nodeId}`);
+          }).catch((e) => {
+            console.warn(`🔊 Play blocked: ${e.message}`);
+            resolve();
+          });
+        }
+      };
+
+      this.audio.src = audioPath;
+      this.audio.load();
     });
   }
 
@@ -109,10 +95,12 @@ class PreRecordedTTS {
   stop(): void {
     if (this.audio) {
       this.audio.pause();
-      this.audio.currentTime = 0;
+      this.audio.src = '';
+      this.audio.onended = null;
+      this.audio.onerror = null;
+      this.audio.oncanplaythrough = null;
+      this.audio = null;
     }
-    this.isPlaying = false;
-    this.currentNodeId = null;
   }
 
   // Skip current audio
@@ -122,12 +110,7 @@ class PreRecordedTTS {
 
   // Check if currently playing
   getIsPlaying(): boolean {
-    return this.isPlaying;
-  }
-
-  // Get current node being played
-  getCurrentNodeId(): string | null {
-    return this.currentNodeId;
+    return this.audio ? !this.audio.paused : false;
   }
 
   // Toggle enabled state
@@ -135,6 +118,7 @@ class PreRecordedTTS {
     this.isEnabled = !this.isEnabled;
     if (!this.isEnabled) {
       this.stop();
+      this.consecutiveErrors = 0; // Reset errors when toggling
     }
     console.log(`🔊 Pre-recorded TTS ${this.isEnabled ? 'enabled' : 'disabled'}`);
     return this.isEnabled;
@@ -146,6 +130,7 @@ class PreRecordedTTS {
     if (!enabled) {
       this.stop();
     }
+    this.consecutiveErrors = 0;
   }
 
   // Check if enabled
