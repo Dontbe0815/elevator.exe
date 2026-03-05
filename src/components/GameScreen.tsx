@@ -6,7 +6,7 @@ import { EndingScreen } from './EndingScreen';
 import { CharacterPortrait } from './CharacterPortrait';
 import { FLOORS } from '@/lib/gameData';
 import { audioManager } from '@/lib/audioManager';
-import { ttsService } from '@/lib/ttsService';
+import { preRecordedTTS } from '@/lib/preRecordedTTS';
 import { useState, useEffect, useRef } from 'react';
 
 export function GameScreen() {
@@ -53,11 +53,11 @@ export function GameScreen() {
   const handleVolumeChange = (newVolume: number) => {
     setVolumeState(newVolume);
     audioManager.setVolume(newVolume / 100);
-    ttsService.setVolume(newVolume / 100);
+    preRecordedTTS.setVolume(newVolume / 100);
   };
 
   const handleToggleTTS = () => {
-    const newState = ttsService.toggle();
+    const newState = preRecordedTTS.toggle();
     setTtsEnabled(newState);
   };
 
@@ -183,7 +183,7 @@ export function GameScreen() {
                   <div className="flex items-center justify-between">
                     <div>
                       <span className="text-gray-400 text-sm">Character Voices</span>
-                      <p className="text-gray-600 text-xs">TTS voice acting</p>
+                      <p className="text-gray-600 text-xs">Pre-recorded dialogue</p>
                     </div>
                     <button
                       onClick={handleToggleTTS}

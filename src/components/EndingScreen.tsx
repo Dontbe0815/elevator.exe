@@ -1,7 +1,7 @@
 'use client';
 
 import { useGame } from '@/lib/gameStore';
-import { ttsService } from '@/lib/ttsService';
+import { preRecordedTTS } from '@/lib/preRecordedTTS';
 
 // All possible endings
 const ALL_ENDINGS = [
@@ -53,7 +53,7 @@ export function EndingScreen() {
 
   // Handle restart with TTS cleanup
   const handleRestart = () => {
-    ttsService.stop();
+    preRecordedTTS.stop();
     restart();
   };
 

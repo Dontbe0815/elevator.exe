@@ -4,7 +4,7 @@ import { useGame } from '@/lib/gameStore';
 import { CharacterId, CHARACTERS, ChoiceType } from '@/lib/gameData';
 import { CharacterPortrait } from './CharacterPortrait';
 import { audioManager } from '@/lib/audioManager';
-import { ttsService, CharacterSpeaker } from '@/lib/ttsService';
+import { preRecordedTTS } from '@/lib/preRecordedTTS';
 import { useEffect, useState, useRef } from 'react';
 
 // Scene images for specific dialogue nodes
@@ -28,60 +28,74 @@ export function DialoguePanel() {
   const [displayedText, setDisplayedText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [showChoices, setShowChoices] = useState(false);
-  const [ttsEnabled, setTtsEnabled] = useState(true);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const prevNodeIdRef = useRef<string>('');
+  const typewriterIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Typewriter effect + TTS
+  // Typewriter effect + Pre-recorded TTS
   useEffect(() => {
     if (!currentNode) return;
     
-    // Stop any ongoing TTS when changing nodes
-    ttsService.stop();
+    // Stop any ongoing audio when changing nodes
+    preRecordedTTS.stop();
     setIsSpeaking(false);
+    
+    // Clear any existing typewriter
+    if (typewriterIntervalRef.current) {
+      clearInterval(typewriterIntervalRef.current);
+    }
     
     setDisplayedText('');
     setIsTyping(true);
     setShowChoices(false);
     
-    let index = 0;
     const text = currentNode.text;
-    const interval = setInterval(() => {
+    let index = 0;
+    
+    // Start playing pre-recorded audio immediately (if available and not ending)
+    const shouldPlayVoice = voiceEnabled && 
+                           currentNode.speaker && 
+                           !currentNode.is_ending && 
+                           preRecordedTTS.hasAudio(currentNode.id);
+    
+    if (shouldPlayVoice) {
+      setIsSpeaking(true);
+      preRecordedTTS.play(currentNode.id).then(() => {
+        setIsSpeaking(false);
+      });
+    }
+    
+    // Typewriter effect - skip typing sounds if voice is playing
+    typewriterIntervalRef.current = setInterval(() => {
       if (index < text.length) {
         setDisplayedText(text.slice(0, index + 1));
-        // Play typing sound on some characters (not spaces)
-        if (text[index] !== ' ' && Math.random() > 0.7) {
+        // Only play typing sound if no voice is playing
+        if (!isSpeaking && text[index] !== ' ' && Math.random() > 0.7) {
           audioManager.playTypeKey();
         }
         index++;
       } else {
         setIsTyping(false);
         setShowChoices(true);
-        clearInterval(interval);
-        
-        // Start TTS after typewriter effect completes
-        if (ttsEnabled && currentNode.speaker && !currentNode.is_ending) {
-          const speaker = currentNode.speaker as CharacterSpeaker;
-          setIsSpeaking(true);
-          ttsService.speak(text, speaker).then(() => {
-            setIsSpeaking(false);
-          });
-        }
+        clearInterval(typewriterIntervalRef.current!);
       }
     }, 25);
 
     prevNodeIdRef.current = currentNode.id;
 
     return () => {
-      clearInterval(interval);
-      ttsService.stop();
+      if (typewriterIntervalRef.current) {
+        clearInterval(typewriterIntervalRef.current);
+      }
+      preRecordedTTS.stop();
     };
-  }, [currentNode?.id, ttsEnabled]);
+  }, [currentNode?.id, voiceEnabled]);
 
-  // Toggle TTS
-  const toggleTTS = () => {
-    const newState = ttsService.toggle();
-    setTtsEnabled(newState);
+  // Toggle voice
+  const toggleVoice = () => {
+    const newState = preRecordedTTS.toggle();
+    setVoiceEnabled(newState);
     if (!newState) {
       setIsSpeaking(false);
     }
@@ -94,9 +108,9 @@ export function DialoguePanel() {
   const isEndingNode = currentNode.is_ending;
 
   const handleNext = () => {
-    // Skip TTS if speaking
+    // Skip voice if speaking
     if (isSpeaking) {
-      ttsService.skip();
+      preRecordedTTS.skip();
       setIsSpeaking(false);
       return;
     }
@@ -106,22 +120,13 @@ export function DialoguePanel() {
       setDisplayedText(currentNode.text);
       setIsTyping(false);
       setShowChoices(true);
-      
-      // Start TTS immediately after skip (but not for endings)
-      if (ttsEnabled && currentNode.speaker && !isEndingNode) {
-        const speaker = currentNode.speaker as CharacterSpeaker;
-        setIsSpeaking(true);
-        ttsService.speak(currentNode.text, speaker).then(() => {
-          setIsSpeaking(false);
-        });
-      }
       return;
     }
     
     // Navigate to next node if there is one
     if (currentNode.next_node_id && !currentNode.choices) {
       audioManager.playClick();
-      ttsService.stop();
+      preRecordedTTS.stop();
       setIsSpeaking(false);
       nextNode(currentNode.next_node_id);
     }
@@ -129,7 +134,7 @@ export function DialoguePanel() {
 
   const handleChoice = (choiceId: string) => {
     audioManager.playChoiceSelect();
-    ttsService.stop();
+    preRecordedTTS.stop();
     setIsSpeaking(false);
     makeChoice(currentNode.id, choiceId);
   };
@@ -137,7 +142,7 @@ export function DialoguePanel() {
   // Handle reaching an ending - trigger the ending phase
   const handleViewEnding = () => {
     audioManager.playChoiceSelect();
-    ttsService.stop();
+    preRecordedTTS.stop();
     
     // Play ending sound
     if (currentNode.ending_type) {
@@ -175,22 +180,22 @@ export function DialoguePanel() {
         </div>
       )}
       
-      {/* TTS Toggle Button */}
+      {/* Voice Toggle Button */}
       <div className="flex justify-end mb-2">
         <button
           onClick={(e) => {
             e.stopPropagation();
-            toggleTTS();
+            toggleVoice();
           }}
           className={`
             px-3 py-1.5 rounded-lg text-xs font-mono transition-all duration-200
-            ${ttsEnabled 
+            ${voiceEnabled 
               ? 'bg-cyan-900/50 border border-cyan-500/50 text-cyan-400 hover:bg-cyan-800/50' 
               : 'bg-gray-800/50 border border-gray-600/50 text-gray-500 hover:bg-gray-700/50'}
           `}
-          title={ttsEnabled ? 'Voice enabled - Click to disable' : 'Voice disabled - Click to enable'}
+          title={voiceEnabled ? 'Voice enabled - Click to disable' : 'Voice disabled - Click to enable'}
         >
-          {ttsEnabled ? '🔊 VOICE ON' : '🔇 VOICE OFF'}
+          {voiceEnabled ? '🔊 VOICE ON' : '🔇 VOICE OFF'}
         </button>
       </div>
       
